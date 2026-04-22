@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Guardian — Network Analyzer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep:#040d14;--bg-card:#0a1624;--accent-cyan:#00e5ff;--accent-green:#00ff88;
+            --accent-red:#ff4444;--accent-amber:#ffb300;--text-primary:#e0f0ff;
+            --text-muted:#4a7090;--border:#0e2035;--border-glow:rgba(0,229,255,0.15);
+            --font-mono:'Share Tech Mono',monospace;--font-display:'Rajdhani',sans-serif;
+        }
+        *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+        html,body{height:100%;background:var(--bg-deep);color:var(--text-primary);font-family:var(--font-mono);overflow-x:hidden;}
+        body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,229,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,0.02) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0;}
+        .app-wrapper{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:20px 24px 40px;}
+
+        /* ALERT BANNER */
+        #alertBanner{display:none;margin-bottom:20px;border-radius:6px;border:1px solid var(--accent-red);background:rgba(255,68,68,0.08);overflow:hidden;animation:alertPulse 1s infinite;}
+        @keyframes alertPulse{0%,100%{border-color:rgba(255,68,68,1);box-shadow:0 0 20px rgba(255,68,68,0.3);}50%{border-color:rgba(255,68,68,0.4);box-shadow:none;}}
+        .alert-top-bar{height:3px;background:var(--accent-red);box-shadow:0 0 10px var(--accent-red);}
+        .alert-body{padding:14px 20px;display:flex;align-items:flex-start;gap:16px;}
+        .alert-icon{font-size:28px;flex-shrink:0;animation:shake 0.5s infinite;}
+        @keyframes shake{0%,100%{transform:translateX(0);}25%{transform:translateX(-3px);}75%{transform:translateX(3px);}}
+        .alert-title{font-family:var(--font-display);font-size:16px;font-weight:700;color:var(--accent-red);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;}
+        .alert-list{list-style:none;display:flex;flex-direction:column;gap:4px;}
+        .alert-list li{font-size:12px;color:#ffaaaa;display:flex;align-items:center;gap:8px;}
+        .alert-list li::before{content:'►';color:var(--accent-red);font-size:8px;}
+        .alert-close{margin-left:auto;background:none;border:1px solid rgba(255,68,68,0.4);color:var(--accent-red);font-family:var(--font-mono);font-size:11px;padding:4px 10px;border-radius:3px;cursor:pointer;flex-shrink:0;letter-spacing:1px;}
+        .alert-close:hover{background:rgba(255,68,68,0.15);}
+        .threat-badge{display:none;align-items:center;gap:6px;padding:6px 12px;border:1px solid rgba(255,68,68,0.5);border-radius:4px;background:rgba(255,68,68,0.1);font-size:11px;letter-spacing:1px;color:var(--accent-red);animation:alertPulse 1.5s infinite;}
+
+        /* HEADER */
+        header{display:flex;align-items:center;justify-content:space-between;padding:20px 0 28px;border-bottom:1px solid var(--border);margin-bottom:28px;}
+        .logo-group{display:flex;align-items:center;gap:14px;}
+        .shield-icon{width:44px;height:50px;background:linear-gradient(160deg,var(--accent-cyan),#0066aa);clip-path:polygon(50% 0%,100% 20%,100% 65%,50% 100%,0% 65%,0% 20%);display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 0 20px rgba(0,229,255,0.4);flex-shrink:0;}
+        .app-title{font-family:var(--font-display);font-size:28px;font-weight:700;letter-spacing:3px;text-transform:uppercase;}
+        .app-title span{color:var(--accent-cyan);}
+        .app-subtitle{font-size:11px;color:var(--text-muted);letter-spacing:2px;text-transform:uppercase;margin-top:3px;}
+        .status-group{display:flex;align-items:center;gap:12px;}
+        .status-badge{display:flex;align-items:center;gap:8px;padding:8px 16px;border:1px solid var(--border-glow);border-radius:4px;background:rgba(0,229,255,0.04);font-size:12px;letter-spacing:1px;}
+        .pulse-dot{width:8px;height:8px;border-radius:50%;background:var(--accent-green);box-shadow:0 0 8px var(--accent-green);animation:pulse 1.5s infinite;}
+        @keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:0.5;transform:scale(0.8);}}
+
+        /* STATS */
+        .stats-row{display:grid;gap:14px;margin-bottom:24px;}
+        .stat-card{background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:18px 20px;position:relative;overflow:hidden;}
+        .stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--card-accent,var(--accent-cyan));box-shadow:0 0 12px var(--card-accent,var(--accent-cyan));}
+        .stat-card:nth-child(1){--card-accent:var(--accent-cyan);}
+        .stat-card:nth-child(2){--card-accent:var(--accent-green);}
+        .stat-card:nth-child(3){--card-accent:var(--accent-amber);}
+        .stat-card:nth-child(4){--card-accent:#cc44ff;}
+        .stat-card.threat-card{--card-accent:var(--accent-red);}
+        .stat-label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px;}
+        .stat-value{font-family:var(--font-display);font-size:32px;font-weight:700;color:var(--text-primary);line-height:1;transition:color 0.3s;}
+        .stat-value.danger{color:var(--accent-red)!important;}
+        .stat-unit{font-size:11px;color:var(--text-muted);margin-top:4px;}
+
+        /* PANELS */
+        .main-grid{display:grid;grid-template-columns:1fr 380px;gap:20px;margin-bottom:20px;}
+        .panel{background:var(--bg-card);border:1px solid var(--border);border-radius:6px;overflow:hidden;}
+        .panel.threat-panel{border-color:rgba(255,68,68,0.4);}
+        .panel-header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);background:rgba(0,229,255,0.02);}
+        .panel-header.threat{background:rgba(255,68,68,0.05);border-bottom-color:rgba(255,68,68,0.2);}
+        .panel-title{font-family:var(--font-display);font-size:13px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--accent-cyan);}
+        .panel-title.red{color:var(--accent-red);}
+        .panel-badge{font-size:10px;padding:2px 8px;background:rgba(0,229,255,0.1);border:1px solid rgba(0,229,255,0.2);border-radius:2px;color:var(--accent-cyan);letter-spacing:1px;}
+        .panel-badge.red{background:rgba(255,68,68,0.1);border-color:rgba(255,68,68,0.3);color:var(--accent-red);}
+        .panel-body{padding:20px;}
+        .chart-container{position:relative;height:280px;}
+
+        /* TABLE */
+        .conn-scroll{max-height:320px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent;}
+        .conn-table{width:100%;border-collapse:collapse;font-size:12px;}
+        .conn-table th{text-align:left;padding:8px 12px;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-muted);border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg-card);}
+        .conn-table td{padding:9px 12px;border-bottom:1px solid rgba(14,32,53,0.5);color:var(--text-primary);vertical-align:middle;}
+        .conn-table tr:last-child td{border-bottom:none;}
+        .conn-table tbody tr{transition:background 0.15s;}
+        .conn-table tbody tr:hover{background:rgba(0,229,255,0.04);}
+        .conn-table tbody tr.suspicious-row{background:rgba(255,68,68,0.06)!important;}
+        .conn-table tbody tr.suspicious-row:hover{background:rgba(255,68,68,0.12)!important;}
+        .ip-tag{display:inline-block;padding:2px 8px;border-radius:3px;font-size:11px;font-family:var(--font-mono);}
+        .ip-tag.src{background:rgba(0,229,255,0.08);border:1px solid rgba(0,229,255,0.2);color:var(--accent-cyan);}
+        .ip-tag.dst{background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.2);color:var(--accent-green);}
+        .ip-tag.sus{background:rgba(255,68,68,0.15);border:1px solid rgba(255,68,68,0.4);color:#ff8888;}
+        .size-tag{color:var(--text-muted);font-size:11px;}
+        .arrow{color:var(--text-muted);font-size:14px;padding:0 4px;}
+        .warn-badge{display:inline-block;font-size:9px;padding:1px 5px;background:rgba(255,68,68,0.2);border:1px solid rgba(255,68,68,0.4);border-radius:2px;color:var(--accent-red);letter-spacing:1px;margin-left:4px;}
+        .empty-state{text-align:center;padding:40px 20px;color:var(--text-muted);font-size:12px;letter-spacing:1px;}
+
+        /* THREAT LOG */
+        .bottom-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;}
+        .threat-scroll{max-height:160px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,68,68,0.3) transparent;}
+        .threat-entry{font-size:11px;padding:8px 20px;border-bottom:1px solid rgba(255,68,68,0.1);display:flex;gap:12px;align-items:flex-start;}
+        .threat-entry:last-child{border-bottom:none;}
+        .threat-time{color:var(--accent-red);opacity:0.8;flex-shrink:0;}
+        .threat-msg{flex:1;color:#ffaaaa;}
+        .threat-ip{font-family:var(--font-mono);color:#ff6666;font-weight:bold;}
+        .no-threats{text-align:center;padding:20px;color:var(--accent-green);font-size:12px;letter-spacing:1px;}
+
+        /* LOG */
+        .log-scroll{max-height:130px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent;}
+        .log-entry{font-size:11px;color:var(--text-muted);padding:5px 20px;border-bottom:1px solid rgba(14,32,53,0.5);display:flex;gap:12px;}
+        .log-time{color:var(--accent-cyan);opacity:0.7;flex-shrink:0;}
+        .log-msg{flex:1;}
+        .log-msg.success{color:var(--accent-green);}
+        .log-msg.warn{color:var(--accent-amber);}
+        .log-msg.error{color:var(--accent-red);}
+
+        footer{margin-top:24px;padding-top:16px;border-top:1px solid var(--border);display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);letter-spacing:1px;}
+        @keyframes fadeInRow{from{opacity:0;transform:translateX(-8px);}to{opacity:1;transform:translateX(0);}}
+        .new-row{animation:fadeInRow 0.3s ease;}
+        @media(max-width:900px){.main-grid,.bottom-grid{grid-template-columns:1fr;}}
+    </style>
+</head>
+<body>
+<div class="app-wrapper">
+
+    <!-- ALERT BANNER -->
+    <div id="alertBanner">
+        <div class="alert-top-bar"></div>
+        <div class="alert-body">
+            <div class="alert-icon">🚨</div>
+            <div style="flex:1;">
+                <div class="alert-title">Suspicious Packets Detected!</div>
+                <ul class="alert-list" id="alertList"></ul>
+            </div>
+            <button class="alert-close" onclick="dismissAlert()">DISMISS</button>
+        </div>
+    </div>
+
+    <!-- HEADER -->
+    <header>
+        <div class="logo-group">
+            <div class="shield-icon">⬡</div>
+            <div>
+                <div class="app-title"><span>Guardian</span> Analyzer</div>
+                <div class="app-subtitle">Network Traffic Monitor v1.0 — Threat Detection Active</div>
+            </div>
+        </div>
+        <div class="status-group">
+            <div class="threat-badge" id="threatBadge">🚨 <span id="threatCount">0</span> THREATS</div>
+            <div class="status-badge" id="statusBadge">
+                <div class="pulse-dot" id="pulseDot"></div>
+                <span id="statusText">CONNECTING...</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- STAT CARDS -->
+    <div class="stats-row" style="grid-template-columns:repeat(5,1fr);">
+        <div class="stat-card"><div class="stat-label">Packets / sec</div><div class="stat-value" id="statPps">0</div><div class="stat-unit">last second</div></div>
+        <div class="stat-card"><div class="stat-label">Total Packets</div><div class="stat-value" id="statTotal">0</div><div class="stat-unit">last 10 seconds</div></div>
+        <div class="stat-card"><div class="stat-label">Active Conns</div><div class="stat-value" id="statConns">0</div><div class="stat-unit">unique pairs</div></div>
+        <div class="stat-card"><div class="stat-label">Last Updated</div><div class="stat-value" id="statTime" style="font-size:22px;">--:--:--</div><div class="stat-unit">local time</div></div>
+        <div class="stat-card threat-card"><div class="stat-label">Threats Found</div><div class="stat-value" id="statThreats">0</div><div class="stat-unit">suspicious IPs</div></div>
+    </div>
+
+    <!-- MAIN GRID -->
+    <div class="main-grid">
+        <div class="panel">
+            <div class="panel-header"><span class="panel-title">Traffic Volume — Last 10 Seconds</span><span class="panel-badge">LIVE</span></div>
+            <div class="panel-body"><div class="chart-container"><canvas id="trafficChart"></canvas></div></div>
+        </div>
+        <div class="panel">
+            <div class="panel-header"><span class="panel-title">Recent Connections</span><span class="panel-badge" id="connCount">0 entries</span></div>
+            <div class="conn-scroll">
+                <table class="conn-table">
+                    <thead><tr><th>Source → Destination</th><th>Size</th></tr></thead>
+                    <tbody id="connTableBody"><tr><td colspan="2" class="empty-state">Waiting for traffic data...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- BOTTOM GRID -->
+    <div class="bottom-grid">
+        <div class="panel threat-panel">
+            <div class="panel-header threat"><span class="panel-title red">🚨 Threat Log</span><span class="panel-badge red" id="threatLogCount">0 alerts</span></div>
+            <div class="threat-scroll" id="threatLog"><div class="no-threats">✅ No threats detected — network looks clean!</div></div>
+        </div>
+        <div class="panel">
+            <div class="panel-header"><span class="panel-title">Activity Log</span><span class="panel-badge">SYSTEM</span></div>
+            <div class="log-scroll" id="activityLog"></div>
+        </div>
+    </div>
+
+    <footer>
+        <span>GUARDIAN NETWORK ANALYZER © 2025</span>
+        <span>Threat Detection: ACTIVE | Safe IPs: Google, Amazon, Microsoft, Cloudflare, Meta</span>
+    </footer>
+</div>
+
+<script>
+// ===== KNOWN SAFE IP RANGES =====
+const SAFE_RANGES = [
+    {prefix:'142.250.',owner:'Google'},{prefix:'142.251.',owner:'Google'},
+    {prefix:'172.217.',owner:'Google'},{prefix:'216.58.',owner:'Google'},
+    {prefix:'74.125.',owner:'Google'},{prefix:'8.8.',owner:'Google DNS'},
+    {prefix:'151.101.',owner:'Fastly CDN'},{prefix:'104.16.',owner:'Cloudflare'},
+    {prefix:'104.17.',owner:'Cloudflare'},{prefix:'1.1.1.',owner:'Cloudflare DNS'},
+    {prefix:'13.107.',owner:'Microsoft'},{prefix:'13.64.',owner:'Microsoft Azure'},
+    {prefix:'20.',owner:'Microsoft Azure'},{prefix:'52.96.',owner:'Microsoft'},
+    {prefix:'40.',owner:'Microsoft'},{prefix:'54.',owner:'Amazon AWS'},
+    {prefix:'52.',owner:'Amazon AWS'},{prefix:'34.',owner:'Google Cloud'},
+    {prefix:'35.',owner:'Google Cloud'},{prefix:'192.168.',owner:'Local Network'},
+    {prefix:'10.',owner:'Local Network'},{prefix:'172.16.',owner:'Local Network'},
+    {prefix:'172.17.',owner:'Local Network'},{prefix:'127.',owner:'Localhost'},
+    {prefix:'103.',owner:'Cloudflare/CDN'},{prefix:'31.13.',owner:'Meta/Facebook'},
+    {prefix:'157.240.',owner:'Meta/Facebook'},{prefix:'179.60.',owner:'Meta/Facebook'},
+    {prefix:'0.',owner:'Broadcast'},{prefix:'255.',owner:'Broadcast'},
+];
+
+function checkIp(ip) {
+    for (const r of SAFE_RANGES) {
+        if (ip && ip.startsWith(r.prefix)) return {safe:true, owner:r.owner};
+    }
+    return {safe:false, owner:'Unknown'};
+}
+
+// ===== THREAT TRACKING =====
+let totalThreats = 0;
+let alertDismissed = false;
+const threatIps = new Set();
+
+function addThreat(ip, direction) {
+    if (!ip || threatIps.has(ip)) return;
+    threatIps.add(ip);
+    totalThreats++;
+    document.getElementById('statThreats').textContent = totalThreats;
+    document.getElementById('statThreats').classList.add('danger');
+    document.getElementById('threatCount').textContent = totalThreats;
+    document.getElementById('threatBadge').style.display = 'flex';
+    addThreatLog(ip, direction);
+    if (!alertDismissed) showAlert(ip);
+    addLog('SUSPICIOUS IP: ' + ip, 'error');
+}
+
+function showAlert(ip) {
+    const banner = document.getElementById('alertBanner');
+    const list   = document.getElementById('alertList');
+    banner.style.display = 'block';
+    const existing = Array.from(list.querySelectorAll('li')).map(li => li.dataset.ip);
+    if (!existing.includes(ip)) {
+        const li = document.createElement('li');
+        li.dataset.ip = ip;
+       li.innerHTML = 'Suspicious Activity: <strong>' + escapeHtml(ip) + '</strong>';
+        list.appendChild(li);
+    }
+}
+
+function dismissAlert() {
+    document.getElementById('alertBanner').style.display = 'none';
+    alertDismissed = true;
+}
+
+function addThreatLog(ip, direction) {
+    const log   = document.getElementById('threatLog');
+    const count = document.getElementById('threatLogCount');
+    const noThreat = log.querySelector('.no-threats');
+    if (noThreat) noThreat.remove();
+    const now   = new Date().toLocaleTimeString('en-IN',{hour12:false});
+    const entry = document.createElement('div');
+    entry.className = 'threat-entry';
+    entry.innerHTML = '<span class="threat-time">' + now + '</span><span class="threat-msg">Unknown IP: <span class="threat-ip">' + escapeHtml(ip) + '</span> (' + escapeHtml(direction) + ') — Not in safe list</span>';
+    log.insertBefore(entry, log.firstChild);
+    while (log.children.length > 50) log.removeChild(log.lastChild);
+    count.textContent = threatIps.size + ' alerts';
+}
+
+// ===== CHART =====
+const trafficChart = new Chart(document.getElementById('trafficChart'), {
+    type:'bar',
+    data:{
+        labels:['-10s','-9s','-8s','-7s','-6s','-5s','-4s','-3s','-2s','-1s'],
+        datasets:[{
+            label:'Packets',
+            data:[0,0,0,0,0,0,0,0,0,0],
+            backgroundColor:['rgba(0,229,255,0.25)','rgba(0,229,255,0.28)','rgba(0,229,255,0.32)','rgba(0,229,255,0.36)','rgba(0,229,255,0.40)','rgba(0,229,255,0.50)','rgba(0,229,255,0.60)','rgba(0,255,136,0.55)','rgba(0,255,136,0.70)','rgba(0,255,136,0.90)'],
+            borderColor:['rgba(0,229,255,0.5)','rgba(0,229,255,0.5)','rgba(0,229,255,0.6)','rgba(0,229,255,0.6)','rgba(0,229,255,0.7)','rgba(0,229,255,0.8)','rgba(0,229,255,1)','rgba(0,255,136,0.8)','rgba(0,255,136,0.9)','rgba(0,255,136,1)'],
+            borderWidth:1,borderRadius:4,barPercentage:0.7
+        }]
+    },
+    options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:{backgroundColor:'#0a1624',borderColor:'rgba(0,229,255,0.3)',borderWidth:1,titleColor:'#00e5ff',bodyColor:'#e0f0ff',callbacks:{label:ctx=>' '+ctx.raw+' packets'}}},
+        scales:{
+            x:{grid:{color:'rgba(14,32,53,0.8)'},ticks:{color:'#4a7090',font:{family:"'Share Tech Mono'",size:11}}},
+            y:{beginAtZero:true,grid:{color:'rgba(14,32,53,0.8)'},ticks:{color:'#4a7090',font:{family:"'Share Tech Mono'",size:11},stepSize:1,precision:0}}
+        },
+        animation:{duration:400}
+    }
+});
+
+// ===== API =====
+const API_BASE = 'http://localhost:8080';
+
+async function fetchTrafficData() {
+    try {
+        const r = await fetch(API_BASE+'/traffic');
+        if (!r.ok) throw new Error(''+r.status);
+        const d = await r.json();
+        trafficChart.data.labels = d.labels;
+        trafficChart.data.datasets[0].data = d.packetsPerSecond;
+        trafficChart.update();
+        document.getElementById('statPps').textContent   = d.packetsPerSecond[d.packetsPerSecond.length-1]||0;
+        document.getElementById('statTotal').textContent = d.totalPackets||0;
+        setStatus(true);
+    } catch(e) { setStatus(false); addLog('Backend unreachable','error'); }
+}
+
+async function fetchConnections() {
+    try {
+        const r = await fetch(API_BASE+'/connections');
+        if (!r.ok) throw new Error(''+r.status);
+        const conns = await r.json();
+        updateTable(conns);
+    } catch(e) { console.error(e); }
+}
+
+function updateTable(connections) {
+    const tbody = document.getElementById('connTableBody');
+    document.getElementById('connCount').textContent = connections.length+' entries';
+    document.getElementById('statConns').textContent = connections.length;
+    if (!connections.length) { tbody.innerHTML='<tr><td colspan="2" class="empty-state">Waiting for traffic data...</td></tr>'; return; }
+    let html = '';
+    connections.forEach((conn,i) => {
+        const sc = checkIp(conn.source);
+        const dc = checkIp(conn.destination);
+        const suspicious = false;
+    
+        html += '<tr class="'+(suspicious?'suspicious-row ':'')+' new-row" style="animation-delay:'+i*20+'ms">'
+              + '<td><span class="ip-tag '+(sc.safe?'src':'sus')+'">'+escapeHtml(conn.source)+'</span>'
+              + '<span class="arrow">→</span>'
+              + '<span class="ip-tag '+(dc.safe?'dst':'sus')+'">'+escapeHtml(conn.destination)+'</span>'
+              + (suspicious?'<span class="warn-badge">⚠ UNKNOWN</span>':'')
+              + '</td><td class="size-tag">'+escapeHtml(conn.size)+'</td></tr>';
+    });
+    tbody.innerHTML = html;
+}
+
+function setStatus(on) {
+    const dot=document.getElementById('pulseDot'),txt=document.getElementById('statusText');
+    dot.style.background = on?'var(--accent-green)':'var(--accent-red)';
+    dot.style.boxShadow  = on?'0 0 8px var(--accent-green)':'0 0 8px var(--accent-red)';
+    dot.style.animation  = on?'pulse 1.5s infinite':'none';
+    txt.textContent      = on?'LIVE':'OFFLINE';
+}
+
+function addLog(msg,type='info') {
+    const log=document.getElementById('activityLog');
+    const now=new Date().toLocaleTimeString('en-IN',{hour12:false});
+    const e=document.createElement('div'); e.className='log-entry';
+    e.innerHTML='<span class="log-time">'+now+'</span><span class="log-msg '+type+'">'+escapeHtml(msg)+'</span>';
+    log.insertBefore(e,log.firstChild);
+    while(log.children.length>50) log.removeChild(log.lastChild);
+}
+
+function escapeHtml(s) {
+    if(typeof s!=='string') return String(s||'');
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let n=0;
+async function refresh() {
+    n++;
+    await Promise.all([fetchTrafficData(),fetchConnections()]);
+    document.getElementById('statTime').textContent=new Date().toLocaleTimeString('en-IN',{hour12:false});
+    if(n%10===0) addLog('Dashboard refreshed '+n+' times');
+}
+
+addLog('Guardian initialized','success');
+addLog('Threat detection: ACTIVE','success');
+refresh();
+setInterval(refresh,1000);
+</script>
+</body>
+</html>
