@@ -1,4 +1,6 @@
 com\guardian\model\PacketData.class
-com\guardian\controller\TrafficController.class
 com\guardian\GuardianApplication.class
 com\guardian\service\TrafficService.class
+com\guardian\model\PacketRecord.class
+com\guardian\repository\PacketRepository.class
+com\guardian\controller\TrafficController.class

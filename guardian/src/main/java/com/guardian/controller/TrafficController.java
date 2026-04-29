@@ -10,103 +10,138 @@ import java.util.Map;
 
 /**
  * =====================================================
- * FILE: TrafficController.java
- * PURPOSE: Defines the REST API endpoints.
+ * FILE: TrafficController.java  ← UPDATED
  *
- * A REST API is like a menu at a restaurant:
- *   - The browser (client) orders something
- *   - The controller takes the order
- *   - It asks the Service (kitchen) to prepare it
- *   - Then sends back the result as JSON
+ * Your original APIs (unchanged):
+ *   GET /traffic     → live chart data
+ *   GET /connections → live table data
+ *   GET /status      → health check
  *
- * @RestController = This class handles HTTP requests
- * @CrossOrigin    = Allows the frontend to call these APIs
- *                  (needed when HTML and Java run separately)
+ * ✅ NEW APIs added:
+ *   GET /history         → last 50 packets from DB
+ *   GET /threats/history → all suspicious packets from DB
+ *   GET /scores          → scored packets with reasons
+ *   GET /stats           → DB stats + top destinations
  * =====================================================
  */
 @RestController
-@CrossOrigin(origins = "*") // Allow requests from any origin (important for development)
+@CrossOrigin(origins = "*")
 public class TrafficController {
 
-    // Spring Boot automatically injects (provides) our TrafficService here.
-    // We don't need to write "new TrafficService()" — Spring handles it!
     @Autowired
     private TrafficService trafficService;
 
-    /**
-     * ===== API 1: GET /traffic =====
-     *
-     * Returns how many packets were captured per second over the last 10 seconds.
-     *
-     * Example response:
-     * {
-     *   "packetsPerSecond": [3, 7, 12, 5, 8, 20, 4, 11, 6, 9],
-     *   "totalPackets": 85,
-     *   "labels": ["-10s", "-9s", "-8s", "-7s", "-6s", "-5s", "-4s", "-3s", "-2s", "-1s"]
-     * }
-     *
-     * The frontend uses this data to draw the bar chart.
-     */
+    // =====================================================
+    // YOUR ORIGINAL APIs (unchanged)
+    // =====================================================
+
     @GetMapping("/traffic")
     public Map<String, Object> getTrafficData() {
-
-        // Ask the service for packets-per-second data
         List<Integer> packetsPerSecond = trafficService.getPacketsPerSecond();
-
-        // Build the response object (this becomes JSON automatically)
         Map<String, Object> response = new HashMap<>();
         response.put("packetsPerSecond", packetsPerSecond);
         response.put("totalPackets", trafficService.getTotalPacketCount());
-
-        // Create time labels for the X-axis of our chart
-        // These will show "-10s", "-9s", ... "-1s"
         String[] labels = new String[10];
-        for (int i = 0; i < 10; i++) {
-            labels[i] = "-" + (10 - i) + "s";
-        }
+        for (int i = 0; i < 10; i++) labels[i] = "-" + (10 - i) + "s";
         response.put("labels", labels);
-
         return response;
     }
 
-    /**
-     * ===== API 2: GET /connections =====
-     *
-     * Returns the most recent source→destination IP connections.
-     *
-     * Example response:
-     * [
-     *   {
-     *     "source": "192.168.1.5",
-     *     "destination": "142.250.80.46",
-     *     "size": "512 bytes",
-     *     "time": "Tue Apr 01 12:34:56 IST 2025"
-     *   },
-     *   ...
-     * ]
-     *
-     * The frontend uses this to fill the connections table.
-     */
     @GetMapping("/connections")
     public List<Map<String, Object>> getConnections() {
         return trafficService.getRecentConnections();
     }
 
-    /**
-     * ===== API 3: GET /status =====
-     *
-     * A simple health-check endpoint.
-     * Useful to confirm the backend is running before the frontend starts.
-     *
-     * Example response:
-     * { "status": "online", "app": "Guardian Network Analyzer" }
-     */
     @GetMapping("/status")
     public Map<String, String> getStatus() {
         Map<String, String> status = new HashMap<>();
-        status.put("status", "online");
-        status.put("app", "Guardian Network Analyzer");
-        status.put("version", "1.0.0");
+        status.put("status",  "online");
+        status.put("app",     "Guardian Network Analyzer");
+        status.put("version", "2.0.0 - Database + Scoring Active");
         return status;
+    }
+
+    // =====================================================
+    // ✅ NEW: Database APIs
+    // =====================================================
+
+    /**
+     * GET /history
+     * Last 50 important packets from database.
+     * Data survives even after app restart!
+     *
+     * Example response:
+     * [
+     *   {
+     *     "id": 42,
+     *     "time": "2025-04-19 23:42:37",
+     *     "source": "192.168.1.5",
+     *     "destination": "185.220.101.5",
+     *     "size": "1200 bytes",
+     *     "suspicious": true,
+     *     "score": 6,
+     *     "reason": "Unknown dest IP (+3) | Night time (+2) | New IP (+1)"
+     *   }
+     * ]
+     */
+    @GetMapping("/history")
+    public List<Map<String, Object>> getHistory() {
+        return trafficService.getHistory();
+    }
+
+    /**
+     * GET /threats/history
+     * All suspicious packets ever detected.
+     * Great for security audit!
+     */
+    @GetMapping("/threats/history")
+    public List<Map<String, Object>> getThreatHistory() {
+        return trafficService.getSuspiciousHistory();
+    }
+
+    /**
+     * GET /scores
+     * Last 50 packets that got a score (WARNING or CRITICAL).
+     * Shows exactly WHY each packet was flagged.
+     *
+     * Example response:
+     * [
+     *   {
+     *     "time": "2025-04-19 23:42:37",
+     *     "source": "192.168.1.5",
+     *     "destination": "185.220.101.5",
+     *     "score": 6,
+     *     "level": "CRITICAL",
+     *     "reasons": [
+     *       "Unknown dest IP: 185.220.101.5 (+3)",
+     *       "Night time traffic 12AM-6AM (+2)",
+     *       "New IP: 185.220.101.5 (+1)"
+     *     ]
+     *   }
+     * ]
+     */
+    @GetMapping("/scores")
+    public List<Map<String, Object>> getScores() {
+        return trafficService.getScoreHistory();
+    }
+
+    /**
+     * GET /stats
+     * Database statistics overview.
+     *
+     * Example response:
+     * {
+     *   "totalPacketsInDB": 1532,
+     *   "suspiciousPackets": 23,
+     *   "uniqueIpsSeen": 48,
+     *   "topDestinations": [
+     *     {"ip": "8.8.8.8",         "count": 523},
+     *     {"ip": "142.250.80.46",   "count": 312}
+     *   ]
+     * }
+     */
+    @GetMapping("/stats")
+    public Map<String, Object> getStats() {
+        return trafficService.getDatabaseStats();
     }
 }
